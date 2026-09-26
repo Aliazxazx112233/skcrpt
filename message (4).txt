@@ -1,0 +1,1837 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TextChatService = game:GetService("TextChatService")
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+
+local SelectedColor = Color3.fromRGB(0, 0, 0)
+local UseCustomColor = false
+local TargetPlayer = nil
+local IsFollowing = false
+local MovementMode = "Normal"
+local IsSpeedMatching = false 
+local IsToolMatching = false
+
+local LastSentText = ""
+local MAX_COMMANDS = 50 
+local CommandCount = 0
+
+-- اتصالات التنصت
+local CharacterChatConnection = nil
+local TextPropertyConnection = nil
+local FollowConnection = nil
+local JumpConnection = nil
+local ToolConnection = nil
+local ToolCharacterConnection = nil
+local ToolBackpackConnection = nil
+local GlobalChatConnections = {}
+
+local Colors = {
+    Color3.fromRGB(0, 0, 0),
+    Color3.fromRGB(255, 255, 255),
+    Color3.fromRGB(255, 50, 50),
+    Color3.fromRGB(50, 255, 50),
+    Color3.fromRGB(50, 150, 255),
+    Color3.fromRGB(255, 255, 50),
+    Color3.fromRGB(200, 50, 255)
+}
+
+-- إنشاء الواجهة الأساسية
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ExternalChatSender"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+-- زر صغير لفتح/إغلاق الواجهة بالكامل
+local ToggleGuiBtn = Instance.new("TextButton")
+ToggleGuiBtn.Size = UDim2.new(0, 40, 0, 40)
+ToggleGuiBtn.Position = UDim2.new(0, 10, 0.5, -20)
+ToggleGuiBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+ToggleGuiBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleGuiBtn.Text = "💬"
+ToggleGuiBtn.Font = Enum.Font.SourceSansBold
+ToggleGuiBtn.TextSize = 20
+ToggleGuiBtn.Active = true
+ToggleGuiBtn.Draggable = true
+ToggleGuiBtn.Parent = ScreenGui
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(1, 0)
+ToggleCorner.Parent = ToggleGuiBtn
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 340, 0, 310)
+MainFrame.Position = UDim2.new(0.5, -170, 0.5, -155)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = MainFrame
+
+-- شريط العنوان العلوي (Header)
+local HeaderFrame = Instance.new("Frame")
+HeaderFrame.Size = UDim2.new(1, 0, 0, 25)
+HeaderFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+HeaderFrame.BorderSizePixel = 0
+HeaderFrame.Parent = MainFrame
+
+local HeaderCorner = Instance.new("UICorner")
+HeaderCorner.CornerRadius = UDim.new(0, 8)
+HeaderCorner.Parent = HeaderFrame
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, -60, 1, 0)
+TitleLabel.Position = UDim2.new(0, 10, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "Chat & Movement Controller"
+TitleLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+TitleLabel.Font = Enum.Font.SourceSansBold
+TitleLabel.TextSize = 12
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Parent = HeaderFrame
+
+-- زر تصغير النافذة (-)
+local MinimizeBtn = Instance.new("TextButton")
+MinimizeBtn.Size = UDim2.new(0, 25, 0, 25)
+MinimizeBtn.Position = UDim2.new(1, -55, 0, 0)
+MinimizeBtn.BackgroundTransparency = 1
+MinimizeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+MinimizeBtn.Text = "-"
+MinimizeBtn.Font = Enum.Font.SourceSansBold
+MinimizeBtn.TextSize = 18
+MinimizeBtn.Parent = HeaderFrame
+
+-- زر إغلاق السكربت بالكامل (X)
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 25, 0, 25)
+CloseBtn.Position = UDim2.new(1, -25, 0, 0)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.TextColor3 = Color3.fromRGB(255, 70, 70)
+CloseBtn.Text = "X"
+CloseBtn.Font = Enum.Font.SourceSansBold
+CloseBtn.TextSize = 14
+CloseBtn.Parent = HeaderFrame
+
+-- حاوية العناصر الداخلية للتحكم عند التصغير
+local ContentFrame = Instance.new("Frame")
+ContentFrame.Size = UDim2.new(1, 0, 1, -25)
+ContentFrame.Position = UDim2.new(0, 0, 0, 25)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.Parent = MainFrame
+
+-- إدخال النص
+local TextBox = Instance.new("TextBox")
+TextBox.Size = UDim2.new(0, 230, 0, 35)
+TextBox.Position = UDim2.new(0, 10, 0, 10)
+TextBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+TextBox.TextColor3 = Color3.fromRGB(0, 0, 0)
+TextBox.PlaceholderText = "اكتب رسالتك أو أمرك..."
+TextBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 120)
+TextBox.Text = ""
+TextBox.Font = Enum.Font.SourceSansBold
+TextBox.TextSize = 16
+TextBox.ClearTextOnFocus = false
+TextBox.Parent = ContentFrame
+
+local TextUICorner = Instance.new("UICorner")
+TextUICorner.CornerRadius = UDim.new(0, 6)
+TextUICorner.Parent = TextBox
+
+-- زر الإرسال
+local SendBtn = Instance.new("TextButton")
+SendBtn.Size = UDim2.new(0, 80, 0, 35)
+SendBtn.Position = UDim2.new(0, 250, 0, 10)
+SendBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 100)
+SendBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SendBtn.Text = "إرسال"
+SendBtn.Font = Enum.Font.SourceSansBold
+SendBtn.TextSize = 16
+SendBtn.Parent = ContentFrame
+
+local BtnUICorner = Instance.new("UICorner")
+BtnUICorner.CornerRadius = UDim.new(0, 6)
+BtnUICorner.Parent = SendBtn
+
+-- زر تحديد وتتبع الشات
+local TargetBtn = Instance.new("TextButton")
+TargetBtn.Size = UDim2.new(1, -20, 0, 24)
+TargetBtn.Position = UDim2.new(0, 10, 0, 50)
+TargetBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+TargetBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+TargetBtn.Text = "اضغط لتحديد لاعب لتقليد كلامه (لا يوجد)"
+TargetBtn.Font = Enum.Font.SourceSansBold
+TargetBtn.TextSize = 12
+TargetBtn.Parent = ContentFrame
+
+local TargetUICorner = Instance.new("UICorner")
+TargetUICorner.CornerRadius = UDim.new(0, 6)
+TargetUICorner.Parent = TargetBtn
+
+-- زر اختيار نمط المشي
+local ModeBtn = Instance.new("TextButton")
+ModeBtn.Size = UDim2.new(1, -20, 0, 24)
+ModeBtn.Position = UDim2.new(0, 10, 0, 78)
+ModeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+ModeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ModeBtn.Text = "نمط الحركة: مشي طبيعي واستجابة (Normal)"
+ModeBtn.Font = Enum.Font.SourceSansBold
+ModeBtn.TextSize = 12
+ModeBtn.Parent = ContentFrame
+
+local ModeUICorner = Instance.new("UICorner")
+ModeUICorner.CornerRadius = UDim.new(0, 6)
+ModeUICorner.Parent = ModeBtn
+
+-- زر تتبع الحركة
+local FollowBtn = Instance.new("TextButton")
+FollowBtn.Size = UDim2.new(1, -20, 0, 24)
+FollowBtn.Position = UDim2.new(0, 10, 0, 106)
+FollowBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+FollowBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+FollowBtn.Text = "تتبع الحركة والقفز (مُعطّل)"
+FollowBtn.Font = Enum.Font.SourceSansBold
+FollowBtn.TextSize = 12
+FollowBtn.Parent = ContentFrame
+
+local FollowUICorner = Instance.new("UICorner")
+FollowUICorner.CornerRadius = UDim.new(0, 6)
+FollowUICorner.Parent = FollowBtn
+
+-- زر مطابقة السرعة
+local SpeedBtn = Instance.new("TextButton")
+SpeedBtn.Size = UDim2.new(1, -20, 0, 24)
+SpeedBtn.Position = UDim2.new(0, 10, 0, 134)
+SpeedBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+SpeedBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SpeedBtn.Text = "مطابقة نفس سرعة اللاعب (مُعطّل)"
+SpeedBtn.Font = Enum.Font.SourceSansBold
+SpeedBtn.TextSize = 12
+SpeedBtn.Parent = ContentFrame
+
+local SpeedUICorner = Instance.new("UICorner")
+SpeedUICorner.CornerRadius = UDim.new(0, 6)
+SpeedUICorner.Parent = SpeedBtn
+
+-- زر مطابقة الغرض/الأداة
+local ToolBtn = Instance.new("TextButton")
+ToolBtn.Size = UDim2.new(1, -20, 0, 24)
+ToolBtn.Position = UDim2.new(0, 10, 0, 162)
+ToolBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+ToolBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToolBtn.Text = "تقليد نمط مسك الأشياء باليد (مُعطّل)"
+ToolBtn.Font = Enum.Font.SourceSansBold
+ToolBtn.TextSize = 12
+ToolBtn.Parent = ContentFrame
+
+local ToolUICorner = Instance.new("UICorner")
+ToolUICorner.CornerRadius = UDim.new(0, 6)
+ToolUICorner.Parent = ToolBtn
+
+-- زر فتح/إغلاق قائمة أوامر السيرفر
+local CmdListToggleBtn = Instance.new("TextButton")
+CmdListToggleBtn.Size = UDim2.new(1, -20, 0, 24)
+CmdListToggleBtn.Position = UDim2.new(0, 10, 0, 190)
+CmdListToggleBtn.BackgroundColor3 = Color3.fromRGB(80, 50, 150)
+CmdListToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CmdListToggleBtn.Text = "سجل الأوامر المكتوبة (فتح/إغلاق)"
+CmdListToggleBtn.Font = Enum.Font.SourceSansBold
+CmdListToggleBtn.TextSize = 12
+CmdListToggleBtn.Parent = ContentFrame
+
+local CmdListToggleCorner = Instance.new("UICorner")
+CmdListToggleCorner.CornerRadius = UDim.new(0, 6)
+CmdListToggleCorner.Parent = CmdListToggleBtn
+
+-- شريط خيارات ألوان النص
+local ColorContainer = Instance.new("Frame")
+ColorContainer.Size = UDim2.new(1, -20, 0, 22)
+ColorContainer.Position = UDim2.new(0, 10, 0, 242)
+ColorContainer.BackgroundTransparency = 1
+ColorContainer.Parent = ContentFrame
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.FillDirection = Enum.FillDirection.Horizontal
+UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+UIListLayout.Padding = UDim.new(0, 6)
+UIListLayout.Parent = ColorContainer
+
+-- زر استعادة لون الشات الأساسي
+local DefaultColorBtn = Instance.new("TextButton")
+DefaultColorBtn.Size = UDim2.new(0, 80, 0, 20)
+DefaultColorBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+DefaultColorBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+DefaultColorBtn.Text = "اللون الأساسي"
+DefaultColorBtn.Font = Enum.Font.SourceSansBold
+DefaultColorBtn.TextSize = 11
+DefaultColorBtn.Parent = ColorContainer
+
+local DefaultUICorner = Instance.new("UICorner")
+DefaultUICorner.CornerRadius = UDim.new(0, 4)
+DefaultUICorner.Parent = DefaultColorBtn
+
+DefaultColorBtn.MouseButton1Click:Connect(function()
+    UseCustomColor = false
+    TextBox.TextColor3 = Color3.fromRGB(0, 0, 0)
+    DefaultColorBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+end)
+
+for _, col in ipairs(Colors) do
+    local ColorBtn = Instance.new("TextButton")
+    ColorBtn.Size = UDim2.new(0, 20, 0, 20)
+    ColorBtn.BackgroundColor3 = col
+    ColorBtn.Text = ""
+    ColorBtn.Parent = ColorContainer
+    
+    local CircleCorner = Instance.new("UICorner")
+    CircleCorner.CornerRadius = UDim.new(1, 0)
+    CircleCorner.Parent = ColorBtn
+    
+    ColorBtn.MouseButton1Click:Connect(function()
+        SelectedColor = col
+        UseCustomColor = true
+        TextBox.TextColor3 = col
+        DefaultColorBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+    end)
+end
+
+-- نافذة قائمة سجل أوامر السيرفر
+local CmdFrame = Instance.new("Frame")
+CmdFrame.Size = UDim2.new(0, 290, 0, 310)
+CmdFrame.Position = UDim2.new(1, 10, 0, 0)
+CmdFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+CmdFrame.BorderSizePixel = 0
+CmdFrame.Visible = false
+CmdFrame.Parent = MainFrame
+
+local CmdUICorner = Instance.new("UICorner")
+CmdUICorner.CornerRadius = UDim.new(0, 8)
+CmdUICorner.Parent = CmdFrame
+
+---------------------------------------------------------
+-- نافذة سريعة ومربعة لأوامر السكنات
+---------------------------------------------------------
+local SkinBoxFrame = Instance.new("Frame")
+SkinBoxFrame.Size = UDim2.new(1, -10, 0, 65)
+SkinBoxFrame.Position = UDim2.new(0, 5, 0, 5)
+SkinBoxFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+SkinBoxFrame.BorderSizePixel = 0
+SkinBoxFrame.Parent = CmdFrame
+
+local SkinBoxCorner = Instance.new("UICorner")
+SkinBoxCorner.CornerRadius = UDim.new(0, 6)
+SkinBoxCorner.Parent = SkinBoxFrame
+
+local SkinBoxTitle = Instance.new("TextLabel")
+SkinBoxTitle.Size = UDim2.new(1, 0, 0, 18)
+SkinBoxTitle.BackgroundTransparency = 1
+SkinBoxTitle.Text = "👕 أوامر السكنات السريعة"
+SkinBoxTitle.TextColor3 = Color3.fromRGB(255, 200, 100)
+SkinBoxTitle.Font = Enum.Font.SourceSansBold
+SkinBoxTitle.TextSize = 12
+SkinBoxTitle.Parent = SkinBoxFrame
+
+local SkinButtonsContainer = Instance.new("Frame")
+SkinButtonsContainer.Size = UDim2.new(1, -10, 0, 38)
+SkinButtonsContainer.Position = UDim2.new(0, 5, 0, 20)
+SkinButtonsContainer.BackgroundTransparency = 1
+SkinButtonsContainer.Parent = SkinBoxFrame
+
+local SkinLayout = Instance.new("UIListLayout")
+SkinLayout.FillDirection = Enum.FillDirection.Horizontal
+SkinLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+SkinLayout.Padding = UDim.new(0, 6)
+SkinLayout.Parent = SkinButtonsContainer
+
+local CharTargetBtn = Instance.new("TextButton")
+CharTargetBtn.Size = UDim2.new(0, 85, 0, 34)
+CharTargetBtn.BackgroundColor3 = Color3.fromRGB(150, 60, 200)
+CharTargetBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CharTargetBtn.Text = "Char Target\n(نسخ السكن)"
+CharTargetBtn.Font = Enum.Font.SourceSansBold
+CharTargetBtn.TextSize = 10
+CharTargetBtn.Parent = SkinButtonsContainer
+
+local CharCorner1 = Instance.new("UICorner")
+CharCorner1.CornerRadius = UDim.new(0, 4)
+CharCorner1.Parent = CharTargetBtn
+
+local UncharBtn = Instance.new("TextButton")
+UncharBtn.Size = UDim2.new(0, 85, 0, 34)
+UncharBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+UncharBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+UncharBtn.Text = "Unchar\n(إعادة سكنك)"
+UncharBtn.Font = Enum.Font.SourceSansBold
+UncharBtn.TextSize = 10
+UncharBtn.Parent = SkinButtonsContainer
+
+local CharCorner2 = Instance.new("UICorner")
+CharCorner2.CornerRadius = UDim.new(0, 4)
+CharCorner2.Parent = UncharBtn
+
+local FixCharBtn = Instance.new("TextButton")
+FixCharBtn.Size = UDim2.new(0, 85, 0, 34)
+FixCharBtn.BackgroundColor3 = Color3.fromRGB(40, 140, 180)
+FixCharBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+FixCharBtn.Text = "Fix Char\n(إصلاح المظهر)"
+FixCharBtn.Font = Enum.Font.SourceSansBold
+FixCharBtn.TextSize = 10
+FixCharBtn.Parent = SkinButtonsContainer
+
+local CharCorner3 = Instance.new("UICorner")
+CharCorner3.CornerRadius = UDim.new(0, 4)
+CharCorner3.Parent = FixCharBtn
+
+---------------------------------------------------------
+-- قسم الأوامر المحفوظة
+---------------------------------------------------------
+local SavedFrame = Instance.new("Frame")
+SavedFrame.Size = UDim2.new(1, -10, 0, 70)
+SavedFrame.Position = UDim2.new(0, 5, 0, 75)
+SavedFrame.BackgroundColor3 = Color3.fromRGB(30, 40, 30)
+SavedFrame.BorderSizePixel = 0
+SavedFrame.Parent = CmdFrame
+
+local SavedCorner = Instance.new("UICorner")
+SavedCorner.CornerRadius = UDim.new(0, 6)
+SavedCorner.Parent = SavedFrame
+
+local SavedTitle = Instance.new("TextLabel")
+SavedTitle.Size = UDim2.new(1, -60, 0, 16)
+SavedTitle.Position = UDim2.new(0, 5, 0, 0)
+SavedTitle.BackgroundTransparency = 1
+SavedTitle.Text = "⭐ الأوامر المحفوظة"
+SavedTitle.TextColor3 = Color3.fromRGB(100, 255, 150)
+SavedTitle.Font = Enum.Font.SourceSansBold
+SavedTitle.TextSize = 11
+SavedTitle.TextXAlignment = Enum.TextXAlignment.Left
+SavedTitle.Parent = SavedFrame
+
+local ClearSavedBtn = Instance.new("TextButton")
+ClearSavedBtn.Size = UDim2.new(0, 50, 0, 14)
+ClearSavedBtn.Position = UDim2.new(1, -55, 0, 1)
+ClearSavedBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+ClearSavedBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ClearSavedBtn.Text = "🗑️ تفريغ"
+ClearSavedBtn.Font = Enum.Font.SourceSansBold
+ClearSavedBtn.TextSize = 9
+ClearSavedBtn.Parent = SavedFrame
+
+local ClearSavedCorner = Instance.new("UICorner")
+ClearSavedCorner.CornerRadius = UDim.new(0, 3)
+ClearSavedCorner.Parent = ClearSavedBtn
+
+local SavedScroll = Instance.new("ScrollingFrame")
+SavedScroll.Size = UDim2.new(1, -6, 1, -20)
+SavedScroll.Position = UDim2.new(0, 3, 0, 18)
+SavedScroll.BackgroundTransparency = 1
+SavedScroll.ScrollBarThickness = 3
+SavedScroll.Parent = SavedFrame
+
+local SavedLayout = Instance.new("UIListLayout")
+SavedLayout.Padding = UDim.new(0, 3)
+SavedLayout.Parent = SavedScroll
+
+SavedLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    SavedScroll.CanvasSize = UDim2.new(0, 0, 0, SavedLayout.AbsoluteContentSize.Y)
+end)
+
+---------------------------------------------------------
+-- عنوان وجداول قائمة سجل الأوامر
+---------------------------------------------------------
+local CmdTitle = Instance.new("TextLabel")
+CmdTitle.Size = UDim2.new(1, -80, 0, 18)
+CmdTitle.Position = UDim2.new(0, 5, 0, 148)
+CmdTitle.BackgroundTransparency = 1
+CmdTitle.Text = "📜 سجل الأوامر المكتوبة"
+CmdTitle.TextColor3 = Color3.fromRGB(200, 200, 200)
+CmdTitle.Font = Enum.Font.SourceSansBold
+CmdTitle.TextSize = 11
+CmdTitle.TextXAlignment = Enum.TextXAlignment.Left
+CmdTitle.Parent = CmdFrame
+
+local ClearCmdsBtn = Instance.new("TextButton")
+ClearCmdsBtn.Size = UDim2.new(0, 70, 0, 16)
+ClearCmdsBtn.Position = UDim2.new(1, -75, 0, 149)
+ClearCmdsBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+ClearCmdsBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ClearCmdsBtn.Text = "🗑️ تنظيف السجل"
+ClearCmdsBtn.Font = Enum.Font.SourceSansBold
+ClearCmdsBtn.TextSize = 9
+ClearCmdsBtn.Parent = CmdFrame
+
+local ClearCmdsCorner = Instance.new("UICorner")
+ClearCmdsCorner.CornerRadius = UDim.new(0, 3)
+ClearCmdsCorner.Parent = ClearCmdsBtn
+
+local CmdScroll = Instance.new("ScrollingFrame")
+CmdScroll.Size = UDim2.new(1, -10, 1, -170)
+CmdScroll.Position = UDim2.new(0, 5, 0, 168)
+CmdScroll.BackgroundTransparency = 1
+CmdScroll.ScrollBarThickness = 4
+CmdScroll.Parent = CmdFrame
+
+local CmdLayout = Instance.new("UIListLayout")
+CmdLayout.Padding = UDim.new(0, 4)
+CmdLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+CmdLayout.Parent = CmdScroll
+
+CmdLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    CmdScroll.CanvasSize = UDim2.new(0, 0, 0, CmdLayout.AbsoluteContentSize.Y)
+end)
+
+local SavedCommandsMap = {}
+
+local ClearSavedConnection
+ClearSavedConnection = ClearSavedBtn.MouseButton1Click:Connect(function()
+    for _, child in ipairs(SavedScroll:GetChildren()) do
+        if child:IsA("Frame") then
+            child:Destroy()
+        end
+    end
+    SavedCommandsMap = {}
+end)
+
+local TrackedCommands = {}
+
+ClearCmdsBtn.MouseButton1Click:Connect(function()
+    for _, child in ipairs(CmdScroll:GetChildren()) do
+        if child:IsA("Frame") then
+            child:Destroy()
+        end
+    end
+    TrackedCommands = {}
+    CommandCount = 0
+end)
+
+CmdListToggleBtn.MouseButton1Click:Connect(function()
+    CmdFrame.Visible = not CmdFrame.Visible
+end)
+
+ToggleGuiBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+local IsMinimized = false
+
+MinimizeBtn.MouseButton1Click:Connect(function()
+    IsMinimized = not IsMinimized
+    if IsMinimized then
+        ContentFrame.Visible = false
+        CmdFrame.Visible = false
+        MainFrame.Size = UDim2.new(0, 340, 0, 25)
+        MinimizeBtn.Text = "+"
+    else
+        ContentFrame.Visible = true
+        MainFrame.Size = UDim2.new(0, 340, 0, 310)
+        MinimizeBtn.Text = "-"
+    end
+end)
+
+-- دالة إيقاف السكربت بالكامل
+local function CleanupAll()
+    if CharacterChatConnection then CharacterChatConnection:Disconnect() end
+    if TextPropertyConnection then TextPropertyConnection:Disconnect() end
+    if FollowConnection then FollowConnection:Disconnect() end
+    if JumpConnection then JumpConnection:Disconnect() end
+    if ToolConnection then ToolConnection:Disconnect() end
+    if ToolCharacterConnection then ToolCharacterConnection:Disconnect() end
+    if ToolBackpackConnection then ToolBackpackConnection:Disconnect() end
+
+    for _, con in ipairs(GlobalChatConnections) do
+        pcall(function()
+            con:Disconnect()
+        end)
+    end
+
+    ScreenGui:Destroy()
+end
+
+CloseBtn.MouseButton1Click:Connect(CleanupAll)
+
+-- =========================================================
+-- أدوات مساعدة للشات
+-- =========================================================
+
+local function IsCommand(text)
+    if not text then return false end
+
+    local clean = text:match("^%s*(.-)%s*$")
+    local firstChar = clean:sub(1, 1)
+
+    return firstChar == "/" or firstChar == ";" or firstChar == "!" or firstChar == "."
+end
+
+-- مهم:
+-- يمنع أي TextLabel/TextBox تابع لـ Tool من اعتباره شات
+local function IsInsideTool(instance)
+    if not instance then
+        return false
+    end
+
+    local current = instance
+
+    while current and current ~= workspace do
+        if current:IsA("Tool") then
+            return true
+        end
+
+        current = current.Parent
+    end
+
+    return false
+end
+
+local function CleanChatText(text)
+    if not text then
+        return ""
+    end
+
+    return tostring(text)
+        :gsub("<[^>]->", "")
+        :gsub("<[^>]*>", "")
+        :gsub("^%s+", "")
+        :gsub("%s+$", "")
+end
+
+-- =========================================================
+-- حفظ الأوامر
+-- =========================================================
+
+local function AddToSavedCommands(fullText)
+    if SavedCommandsMap[fullText] then return end
+
+    SavedCommandsMap[fullText] = true
+
+    local SItemFrame = Instance.new("Frame")
+    SItemFrame.Size = UDim2.new(1, -4, 0, 22)
+    SItemFrame.BackgroundColor3 = Color3.fromRGB(45, 60, 45)
+    SItemFrame.BorderSizePixel = 0
+    SItemFrame.Parent = SavedScroll
+
+    local SItemCorner = Instance.new("UICorner")
+    SItemCorner.CornerRadius = UDim.new(0, 3)
+    SItemCorner.Parent = SItemFrame
+
+    local SLabel = Instance.new("TextLabel")
+    SLabel.Size = UDim2.new(1, -75, 1, 0)
+    SLabel.Position = UDim2.new(0, 5, 0, 0)
+    SLabel.BackgroundTransparency = 1
+    SLabel.Text = fullText
+    SLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    SLabel.Font = Enum.Font.SourceSansBold
+    SLabel.TextSize = 11
+    SLabel.TextXAlignment = Enum.TextXAlignment.Left
+    SLabel.ClipsDescendants = true
+    SLabel.Parent = SItemFrame
+
+    local SSendBtn = Instance.new("TextButton")
+    SSendBtn.Size = UDim2.new(0, 36, 0, 16)
+    SSendBtn.Position = UDim2.new(1, -70, 0.5, -8)
+    SSendBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 100)
+    SSendBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    SSendBtn.Text = "إرسال"
+    SSendBtn.Font = Enum.Font.SourceSansBold
+    SSendBtn.TextSize = 10
+    SSendBtn.Parent = SItemFrame
+
+    local SSendCorner = Instance.new("UICorner")
+    SSendCorner.CornerRadius = UDim.new(0, 3)
+    SSendCorner.Parent = SSendBtn
+
+    SSendBtn.MouseButton1Click:Connect(function()
+        SendCustomMessage(fullText)
+    end)
+
+    local DelBtn = Instance.new("TextButton")
+    DelBtn.Size = UDim2.new(0, 28, 0, 16)
+    DelBtn.Position = UDim2.new(1, -30, 0.5, -8)
+    DelBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    DelBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    DelBtn.Text = "حذف"
+    DelBtn.Font = Enum.Font.SourceSansBold
+    DelBtn.TextSize = 10
+    DelBtn.Parent = SItemFrame
+
+    local DelCorner = Instance.new("UICorner")
+    DelCorner.CornerRadius = UDim.new(0, 3)
+    DelCorner.Parent = DelBtn
+
+    DelBtn.MouseButton1Click:Connect(function()
+        SavedCommandsMap[fullText] = nil
+        SItemFrame:Destroy()
+    end)
+end
+
+local function AddCommandToList(player, fullText)
+    if not player or not fullText or not IsCommand(fullText) then
+        return
+    end
+
+    local key = player.Name .. ":" .. fullText
+
+    if TrackedCommands[key] then
+        return
+    end
+
+    TrackedCommands[key] = true
+    CommandCount = CommandCount + 1
+
+    local children = CmdScroll:GetChildren()
+    local itemFrames = {}
+
+    for _, child in ipairs(children) do
+        if child:IsA("Frame") then
+            table.insert(itemFrames, child)
+        end
+    end
+
+    if #itemFrames >= MAX_COMMANDS then
+        table.sort(itemFrames, function(a, b)
+            return a.LayoutOrder < b.LayoutOrder
+        end)
+
+        local oldestFrame = itemFrames[#itemFrames]
+
+        if oldestFrame then
+            oldestFrame:Destroy()
+        end
+    end
+
+    local ItemFrame = Instance.new("Frame")
+    ItemFrame.Size = UDim2.new(1, -6, 0, 26)
+    ItemFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    ItemFrame.BorderSizePixel = 0
+    ItemFrame.LayoutOrder = -CommandCount
+    ItemFrame.Parent = CmdScroll
+
+    local ItemCorner = Instance.new("UICorner")
+    ItemCorner.CornerRadius = UDim.new(0, 4)
+    ItemCorner.Parent = ItemFrame
+
+    local Label = Instance.new("TextLabel")
+    Label.Size = UDim2.new(1, -125, 1, 0)
+    Label.Position = UDim2.new(0, 5, 0, 0)
+    Label.BackgroundTransparency = 1
+    Label.Text = "[" .. player.DisplayName .. "]: " .. fullText
+    Label.TextColor3 = Color3.fromRGB(220, 220, 220)
+    Label.Font = Enum.Font.SourceSansBold
+    Label.TextSize = 12
+    Label.TextXAlignment = Enum.TextXAlignment.Left
+    Label.ClipsDescendants = true
+    Label.Parent = ItemFrame
+
+    local SaveBtn = Instance.new("TextButton")
+    SaveBtn.Size = UDim2.new(0, 36, 0, 18)
+    SaveBtn.Position = UDim2.new(1, -120, 0.5, -9)
+    SaveBtn.BackgroundColor3 = Color3.fromRGB(180, 120, 0)
+    SaveBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    SaveBtn.Text = "حفظ"
+    SaveBtn.Font = Enum.Font.SourceSansBold
+    SaveBtn.TextSize = 10
+    SaveBtn.Parent = ItemFrame
+
+    local SaveCorner = Instance.new("UICorner")
+    SaveCorner.CornerRadius = UDim.new(0, 3)
+    SaveCorner.Parent = SaveBtn
+
+    SaveBtn.MouseButton1Click:Connect(function()
+        AddToSavedCommands(fullText)
+
+        SaveBtn.Text = "تم!"
+        SaveBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 80)
+
+        task.wait(1)
+
+        if SaveBtn.Parent then
+            SaveBtn.Text = "حفظ"
+            SaveBtn.BackgroundColor3 = Color3.fromRGB(180, 120, 0)
+        end
+    end)
+
+    local CopyBtn = Instance.new("TextButton")
+    CopyBtn.Size = UDim2.new(0, 36, 0, 18)
+    CopyBtn.Position = UDim2.new(1, -80, 0.5, -9)
+    CopyBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 200)
+    CopyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    CopyBtn.Text = "نسخ"
+    CopyBtn.Font = Enum.Font.SourceSansBold
+    CopyBtn.TextSize = 10
+    CopyBtn.Parent = ItemFrame
+
+    local CopyCorner = Instance.new("UICorner")
+    CopyCorner.CornerRadius = UDim.new(0, 3)
+    CopyCorner.Parent = CopyBtn
+
+    CopyBtn.MouseButton1Click:Connect(function()
+        if setclipboard then
+            setclipboard(fullText)
+        elseif Clipboard and Clipboard.set then
+            Clipboard.set(fullText)
+        end
+
+        CopyBtn.Text = "تم!"
+        CopyBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 80)
+
+        task.wait(1)
+
+        if CopyBtn.Parent then
+            CopyBtn.Text = "نسخ"
+            CopyBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 200)
+        end
+    end)
+
+    local DirectSendBtn = Instance.new("TextButton")
+    DirectSendBtn.Size = UDim2.new(0, 38, 0, 18)
+    DirectSendBtn.Position = UDim2.new(1, -40, 0.5, -9)
+    DirectSendBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 100)
+    DirectSendBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    DirectSendBtn.Text = "إرسال"
+    DirectSendBtn.Font = Enum.Font.SourceSansBold
+    DirectSendBtn.TextSize = 10
+    DirectSendBtn.Parent = ItemFrame
+
+    local DirectSendCorner = Instance.new("UICorner")
+    DirectSendCorner.CornerRadius = UDim.new(0, 3)
+    DirectSendCorner.Parent = DirectSendBtn
+
+    DirectSendBtn.MouseButton1Click:Connect(function()
+        SendCustomMessage(fullText)
+
+        DirectSendBtn.Text = "تم!"
+        DirectSendBtn.BackgroundColor3 = Color3.fromRGB(0, 220, 120)
+
+        task.wait(1)
+
+        if DirectSendBtn.Parent then
+            DirectSendBtn.Text = "إرسال"
+            DirectSendBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 100)
+        end
+    end)
+end
+
+-- =========================================================
+-- التقاط النصوص المرئية بدون التقاط نصوص الأدوات
+-- =========================================================
+
+local function GlobalChatListener(player)
+    if player == LocalPlayer then
+        return
+    end
+
+    local function MonitorTextLabel(label)
+        if not label or not label.Parent then
+            return
+        end
+
+        -- تجاهل أي نص داخل Tool بالكامل
+        if IsInsideTool(label) then
+            return
+        end
+
+        local cleanMsg = CleanChatText(label.Text)
+
+        if cleanMsg ~= "" and IsCommand(cleanMsg) then
+            AddCommandToList(player, cleanMsg)
+        end
+    end
+
+    local function HookCharacter(char)
+        if not char then
+            return
+        end
+
+        for _, descendant in ipairs(char:GetDescendants()) do
+            if descendant:IsA("TextLabel") or descendant:IsA("TextBox") then
+                MonitorTextLabel(descendant)
+
+                local propertyConnection = descendant:GetPropertyChangedSignal("Text"):Connect(function()
+                    MonitorTextLabel(descendant)
+                end)
+
+                table.insert(GlobalChatConnections, propertyConnection)
+            end
+        end
+
+        local c2 = char.DescendantAdded:Connect(function(descendant)
+            if descendant:IsA("TextLabel") or descendant:IsA("TextBox") then
+                MonitorTextLabel(descendant)
+
+                local propertyConnection = descendant:GetPropertyChangedSignal("Text"):Connect(function()
+                    MonitorTextLabel(descendant)
+                end)
+
+                table.insert(GlobalChatConnections, propertyConnection)
+            end
+        end)
+
+        table.insert(GlobalChatConnections, c2)
+    end
+
+    local c1 = player.CharacterAdded:Connect(function(char)
+        HookCharacter(char)
+    end)
+
+    table.insert(GlobalChatConnections, c1)
+
+    if player.Character then
+        HookCharacter(player.Character)
+    end
+end
+
+for _, p in ipairs(Players:GetPlayers()) do
+    GlobalChatListener(p)
+end
+
+table.insert(GlobalChatConnections, Players.PlayerAdded:Connect(GlobalChatListener))
+
+-- =========================================================
+-- TextChatService
+-- =========================================================
+
+if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+    TextChatService.OnIncomingMessage = function(message)
+        if not message or not message.TextSource then
+            return
+        end
+
+        local senderPlayer = Players:GetPlayerByUserId(message.TextSource.UserId)
+
+        if senderPlayer and senderPlayer ~= LocalPlayer then
+            local cleanMsg = CleanChatText(message.Text)
+
+            if IsCommand(cleanMsg) then
+                AddCommandToList(senderPlayer, cleanMsg)
+            end
+
+            if TargetPlayer
+                and senderPlayer == TargetPlayer
+                and cleanMsg ~= ""
+                and cleanMsg ~= LastSentText then
+
+                SendCustomMessage(cleanMsg)
+            end
+        end
+    end
+end
+
+-- =========================================================
+-- دوال السكن
+-- =========================================================
+
+function ChangeCharacterAppearance(targetPlayer)
+    if not targetPlayer then
+        return
+    end
+
+    local myChar = LocalPlayer.Character
+
+    if not myChar then
+        return
+    end
+
+    pcall(function()
+        local humanoid = myChar:FindFirstChildOfClass("Humanoid")
+
+        if humanoid then
+            local description = Players:GetHumanoidDescriptionFromUserId(targetPlayer.UserId)
+            humanoid:ApplyDescription(description)
+        end
+    end)
+end
+
+function ResetCharacterAppearance()
+    local myChar = LocalPlayer.Character
+
+    if not myChar then
+        return
+    end
+
+    pcall(function()
+        local humanoid = myChar:FindFirstChildOfClass("Humanoid")
+
+        if humanoid then
+            local description = Players:GetHumanoidDescriptionFromUserId(LocalPlayer.UserId)
+            humanoid:ApplyDescription(description)
+        end
+    end)
+end
+
+CharTargetBtn.MouseButton1Click:Connect(function()
+    if TargetPlayer then
+        ChangeCharacterAppearance(TargetPlayer)
+    else
+        CharTargetBtn.Text = "حدد هدفاً أولاً!"
+
+        task.wait(1)
+
+        if CharTargetBtn.Parent then
+            CharTargetBtn.Text = "Char Target\n(نسخ السكن)"
+        end
+    end
+end)
+
+UncharBtn.MouseButton1Click:Connect(function()
+    ResetCharacterAppearance()
+end)
+
+FixCharBtn.MouseButton1Click:Connect(function()
+    if LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+
+        if humanoid then
+            pcall(function()
+                humanoid:BuildRigFromAttachments()
+            end)
+        end
+    end
+end)
+
+-- =========================================================
+-- نظام عكس الكلمات
+-- =========================================================
+
+local WordReplacements = {
+    ["انا"] = "انت",
+    ["أنا"] = "أنت",
+
+    ["لي"] = "لك",
+    ["معي"] = "معك",
+    ["عندي"] = "عندك",
+    ["حقوقي"] = "حقوقك",
+    ["حقي"] = "حقك",
+    ["نفسي"] = "نفسك",
+    ["بيتي"] = "بيتك",
+    ["سيارتي"] = "سيارتك",
+
+    ["عمك"] = "علي عمك",
+    ["عمتك"] = "علي عمك",
+    ["عمي"] = "علي عمك",
+    ["عمتي"] = "علي عمك",
+
+    ["تاج راسك"] = "علي تاج راسك",
+    ["سيدك"] = "علي سيدك",
+    ["الملك"] = "علي الملك",
+    ["الأسطورة"] = "علي الأسطورة",
+
+    ["هوهو"] = "فلشتنا",
+    ["هههه"] = "ههههه علي عمك",
+    ["ههههه"] = "هههههه علي المطنوخ",
+
+    ["دعستك"] = "دعست نفسك",
+    ["قتلتك"] = "قتلت نفسك",
+    ["جلدتك"] = "جلدت نفسك",
+    ["فزت عليك"] = "فزت على نفسك",
+
+    ["من انت"] = "من علي عمك",
+    ["من أنت"] = "من علي عمك",
+    ["مين انت"] = "مين علي عمك",
+    ["مين أنت"] = "مين علي عمك"
+}
+
+-- حماية النص من رموز Lua pattern
+local function EscapePattern(text)
+    return text:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1")
+end
+
+-- عكس النص مع المحافظة على علامات الترقيم
+local function FilterAndReplaceWords(text)
+    if not text or text == "" then
+        return text
+    end
+
+    local modifiedText = text
+
+    -- العبارات المتعددة الكلمات أولاً
+    -- حتى لا تتدخل عمليات استبدال الكلمات المفردة معها
+    local phraseReplacements = {
+        ["تاج راسك"] = "علي تاج راسك",
+        ["من انت"] = "من علي عمك",
+        ["من أنت"] = "من علي عمك",
+        ["مين انت"] = "مين علي عمك",
+        ["مين أنت"] = "مين علي عمك",
+        ["فزت عليك"] = "فزت على نفسك",
+        ["جلدتك"] = "جلدت نفسك",
+        ["دعستك"] = "دعست نفسك",
+        ["قتلتك"] = "قتلت نفسك"
+    }
+
+    for phrase, replacement in pairs(phraseReplacements) do
+        local escapedPhrase = EscapePattern(phrase)
+
+        modifiedText = modifiedText:gsub(
+            "(^)" .. escapedPhrase .. "([%s%p])",
+            "%1" .. replacement .. "%2"
+        )
+
+        modifiedText = modifiedText:gsub(
+            "([%s])" .. escapedPhrase .. "([%s%p])",
+            "%1" .. replacement .. "%2"
+        )
+
+        modifiedText = modifiedText:gsub(
+            "([%s])" .. escapedPhrase .. "$",
+            "%1" .. replacement
+        )
+    end
+
+    -- الكلمات المفردة
+    modifiedText = modifiedText:gsub("%S+", function(token)
+        local leading = ""
+        local trailing = ""
+        local core = token
+
+        -- حفظ علامات البداية
+        while core ~= "" do
+            local first = core:sub(1, 1)
+
+            if first == "("
+                or first == ")"
+                or first == "["
+                or first == "]"
+                or first == "{"
+                or first == "}"
+                or first == "\""
+                or first == "'"
+                or first == "!"
+                or first == "?"
+                or first == ","
+                or first == "."
+                or first == ":"
+                or first == ";"
+                or first == "؟"
+                or first == "،"
+                or first == "؛" then
+
+                leading = leading .. first
+                core = core:sub(2)
+            else
+                break
+            end
+        end
+
+        -- حفظ علامات النهاية
+        while core ~= "" do
+            local last = core:sub(-1)
+
+            if last == "("
+                or last == ")"
+                or last == "["
+                or last == "]"
+                or last == "{"
+                or last == "}"
+                or last == "\""
+                or last == "'"
+                or last == "!"
+                or last == "?"
+                or last == ","
+                or last == "."
+                or last == ":"
+                or last == ";"
+                or last == "؟"
+                or last == "،"
+                or last == "؛" then
+
+                trailing = last .. trailing
+                core = core:sub(1, -2)
+            else
+                break
+            end
+        end
+
+        local replacement = WordReplacements[core]
+
+        if replacement then
+            return leading .. replacement .. trailing
+        end
+
+        return token
+    end)
+
+    return modifiedText
+end
+
+-- =========================================================
+-- نظام الأدوات - النسخة الدقيقة
+-- =========================================================
+
+local function GetEquippedTool(character)
+    if not character then
+        return nil
+    end
+
+    for _, child in ipairs(character:GetChildren()) do
+        if child:IsA("Tool") then
+            return child
+        end
+    end
+
+    return nil
+end
+
+local function FindMatchingTool(backpack, toolName)
+    if not backpack or not toolName then
+        return nil
+    end
+
+    -- بحث مطابق للاسم
+    local exact = backpack:FindFirstChild(toolName)
+
+    if exact and exact:IsA("Tool") then
+        return exact
+    end
+
+    -- احتياط في حال كان هناك اختلاف بسيط
+    for _, item in ipairs(backpack:GetChildren()) do
+        if item:IsA("Tool") and item.Name == toolName then
+            return item
+        end
+    end
+
+    return nil
+end
+
+local function StopToolMatching()
+    if ToolConnection then
+        ToolConnection:Disconnect()
+        ToolConnection = nil
+    end
+
+    if ToolCharacterConnection then
+        ToolCharacterConnection:Disconnect()
+        ToolCharacterConnection = nil
+    end
+
+    if ToolBackpackConnection then
+        ToolBackpackConnection:Disconnect()
+        ToolBackpackConnection = nil
+    end
+end
+
+local function StartToolMatching()
+    StopToolMatching()
+
+    if not TargetPlayer then
+        return
+    end
+
+    local function SyncTool()
+        if not IsToolMatching then
+            return
+        end
+
+        if not TargetPlayer then
+            return
+        end
+
+        local targetChar = TargetPlayer.Character
+        local myChar = LocalPlayer.Character
+        local myBackpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+
+        if not targetChar or not myChar or not myBackpack then
+            return
+        end
+
+        local targetTool = GetEquippedTool(targetChar)
+        local myTool = GetEquippedTool(myChar)
+        local myHumanoid = myChar:FindFirstChildOfClass("Humanoid")
+
+        if not myHumanoid then
+            return
+        end
+
+        -- اللاعب المستهدف ماسك أداة
+        if targetTool then
+            if myTool and myTool.Name == targetTool.Name then
+                return
+            end
+
+            local matchingTool = FindMatchingTool(myBackpack, targetTool.Name)
+
+            if matchingTool then
+                pcall(function()
+                    myHumanoid:EquipTool(matchingTool)
+                end)
+            end
+
+        -- اللاعب المستهدف لا يمسك أي أداة
+        else
+            if myTool then
+                pcall(function()
+                    myHumanoid:UnequipTools()
+                end)
+            end
+        end
+    end
+
+    -- أول مزامنة
+    SyncTool()
+
+    local function HookTargetCharacter(character)
+        if not character then
+            return
+        end
+
+        if ToolConnection then
+            ToolConnection:Disconnect()
+            ToolConnection = nil
+        end
+
+        -- يلتقط:
+        -- Tool يدخل اليد
+        -- Tool يخرج من اليد
+        -- تبديل الأداة
+        ToolConnection = character.ChildAdded:Connect(function(child)
+            if child:IsA("Tool") then
+                task.defer(SyncTool)
+            end
+        end)
+
+        local childRemovedConnection = character.ChildRemoved:Connect(function(child)
+            if child:IsA("Tool") then
+                task.defer(SyncTool)
+            end
+        end)
+
+        -- نحتفظ به مع بقية الاتصالات
+        table.insert(GlobalChatConnections, childRemovedConnection)
+
+        task.defer(SyncTool)
+    end
+
+    if TargetPlayer.Character then
+        HookTargetCharacter(TargetPlayer.Character)
+    end
+
+    -- إذا مات الهدف وظهرت شخصية جديدة
+    ToolCharacterConnection = TargetPlayer.CharacterAdded:Connect(function(character)
+        task.wait(0.15)
+
+        if IsToolMatching then
+            HookTargetCharacter(character)
+            SyncTool()
+        end
+    end)
+
+    -- إذا ظهرت الأداة في حقيبتي بعد ما كانت غير موجودة
+    local myBackpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+
+    if myBackpack then
+        ToolBackpackConnection = myBackpack.ChildAdded:Connect(function(child)
+            if child:IsA("Tool") then
+                task.defer(SyncTool)
+            end
+        end)
+    end
+end
+
+-- =========================================================
+-- متابعة الحركة
+-- =========================================================
+
+local function StopFollowing()
+    if FollowConnection then
+        FollowConnection:Disconnect()
+        FollowConnection = nil
+    end
+
+    if JumpConnection then
+        JumpConnection:Disconnect()
+        JumpConnection = nil
+    end
+end
+
+local function StartFollowing()
+    StopFollowing()
+
+    if not TargetPlayer or not TargetPlayer.Character then
+        return
+    end
+
+    local targetHumanoid = TargetPlayer.Character:FindFirstChildOfClass("Humanoid")
+
+    if targetHumanoid then
+        JumpConnection = targetHumanoid.Jumping:Connect(function(active)
+            if IsFollowing and active then
+                local myChar = LocalPlayer.Character
+
+                if myChar then
+                    local myHumanoid = myChar:FindFirstChildOfClass("Humanoid")
+
+                    if myHumanoid then
+                        myHumanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                    end
+                end
+            end
+        end)
+    end
+
+    FollowConnection = RunService.RenderStepped:Connect(function()
+        if IsFollowing
+            and TargetPlayer
+            and TargetPlayer.Character
+            and TargetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+
+            local myChar = LocalPlayer.Character
+            local targetChar = TargetPlayer.Character
+            local tHum = targetChar:FindFirstChildOfClass("Humanoid")
+
+            if myChar
+                and myChar:FindFirstChildOfClass("Humanoid")
+                and myChar:FindFirstChild("HumanoidRootPart") then
+
+                local myHum = myChar:FindFirstChildOfClass("Humanoid")
+                local targetHRP = targetChar.HumanoidRootPart
+                local myHRP = myChar.HumanoidRootPart
+
+                if IsSpeedMatching and tHum then
+                    myHum.WalkSpeed = tHum.WalkSpeed
+                end
+
+                if MovementMode == "Mirror" then
+                    local offset = targetHRP.CFrame.LookVector * -2
+
+                    myHRP.CFrame = targetHRP.CFrame + offset
+                    myHRP.AssemblyLinearVelocity = targetHRP.AssemblyLinearVelocity
+                    myHRP.AssemblyAngularVelocity = targetHRP.AssemblyAngularVelocity
+
+                elseif MovementMode == "Normal" then
+                    local _, targetY, _ = targetHRP.CFrame:ToOrientation()
+
+                    myHRP.CFrame =
+                        CFrame.new(myHRP.Position)
+                        * CFrame.Angles(0, targetY, 0)
+
+                    myHum:MoveTo(
+                        targetHRP.Position
+                        - (targetHRP.CFrame.LookVector * 2)
+                    )
+                end
+            end
+        else
+            StopFollowing()
+        end
+    end)
+end
+
+-- =========================================================
+-- معالجة الأوامر
+-- =========================================================
+
+local function ProcessCommands(text)
+    local cmd = text:lower():gsub("%s+", "")
+
+    if cmd == ";charme" or cmd == ";charma" or cmd == ";char" then
+        if TargetPlayer then
+            ChangeCharacterAppearance(TargetPlayer)
+        end
+
+        return true
+
+    elseif cmd == ";unchar" then
+        ResetCharacterAppearance()
+        return true
+
+    elseif cmd == ";follow" then
+        FollowBtn:Activate()
+        return true
+
+    elseif cmd == ";speed" then
+        SpeedBtn:Activate()
+        return true
+
+    elseif cmd == ";tool" then
+        ToolBtn:Activate()
+        return true
+    end
+
+    return false
+end
+
+-- =========================================================
+-- إرسال الرسائل
+-- =========================================================
+
+function SendCustomMessage(textToSend)
+    local text = textToSend or TextBox.Text
+
+    if text == "" or text:match("^%s*$") then
+        return
+    end
+
+    if ProcessCommands(text) then
+        if not textToSend then
+            TextBox.Text = ""
+        end
+
+        return
+    end
+
+    -- هنا يتم عكس الكلام فعلياً
+    text = FilterAndReplaceWords(text)
+
+    LastSentText = text
+
+    if not textToSend then
+        TextBox.Text = ""
+    end
+
+    local formattedText = text
+
+    if UseCustomColor then
+        local hexColor = SelectedColor:ToHex()
+
+        formattedText = string.format(
+            "<font color='#%s'>%s</font>",
+            hexColor,
+            text
+        )
+    end
+
+    task.spawn(function()
+        for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+            if obj:IsA("RemoteEvent") then
+                local name = obj.Name:lower()
+
+                if name:find("chat")
+                    or name:find("message")
+                    or name:find("say")
+                    or name:find("send") then
+
+                    pcall(function()
+                        obj:FireServer(formattedText)
+                    end)
+                end
+            end
+        end
+    end)
+end
+
+-- =========================================================
+-- التقاط شات اللاعب المستهدف
+-- =========================================================
+
+local function ClearChatHooks()
+    if CharacterChatConnection then
+        CharacterChatConnection:Disconnect()
+        CharacterChatConnection = nil
+    end
+
+    if TextPropertyConnection then
+        TextPropertyConnection:Disconnect()
+        TextPropertyConnection = nil
+    end
+end
+
+local function HookPlayerChat(player)
+    ClearChatHooks()
+
+    if not player then
+        return
+    end
+
+    local function ProcessTextLabel(label)
+        if not TargetPlayer then
+            return
+        end
+
+        -- أهم فلتر:
+        -- أي كلام داخل Tool لا يعتبر شات
+        if IsInsideTool(label) then
+            return
+        end
+
+        local cleanMsg = CleanChatText(label.Text)
+
+        if cleanMsg ~= ""
+            and cleanMsg ~= LastSentText then
+
+            SendCustomMessage(cleanMsg)
+        end
+    end
+
+    local function HookCharacter(character)
+        if not character then
+            return
+        end
+
+        for _, descendant in ipairs(character:GetDescendants()) do
+            if descendant:IsA("TextLabel")
+                or descendant:IsA("TextBox") then
+
+                if not IsInsideTool(descendant) then
+                    local connection
+
+                    connection = descendant:GetPropertyChangedSignal("Text"):Connect(function()
+                        if IsInsideTool(descendant) then
+                            return
+                        end
+
+                        ProcessTextLabel(descendant)
+                    end)
+
+                    TextPropertyConnection = connection
+                end
+            end
+        end
+
+        CharacterChatConnection = character.DescendantAdded:Connect(function(descendant)
+            if not TargetPlayer then
+                return
+            end
+
+            if descendant:IsA("TextLabel")
+                or descendant:IsA("TextBox") then
+
+                -- تجاهل نصوص الأدوات
+                if IsInsideTool(descendant) then
+                    return
+                end
+
+                ProcessTextLabel(descendant)
+
+                if TextPropertyConnection then
+                    TextPropertyConnection:Disconnect()
+                end
+
+                TextPropertyConnection =
+                    descendant:GetPropertyChangedSignal("Text"):Connect(function()
+                        if IsInsideTool(descendant) then
+                            return
+                        end
+
+                        ProcessTextLabel(descendant)
+                    end)
+            end
+        end)
+    end
+
+    if player.Character then
+        HookCharacter(player.Character)
+    end
+
+    table.insert(
+        GlobalChatConnections,
+        player.CharacterAdded:Connect(function(character)
+            task.wait(0.1)
+
+            if TargetPlayer == player then
+                HookCharacter(character)
+            end
+        end)
+    )
+end
+
+-- =========================================================
+-- أزرار الحركة
+-- =========================================================
+
+ModeBtn.MouseButton1Click:Connect(function()
+    if MovementMode == "Mirror" then
+        MovementMode = "Normal"
+        ModeBtn.Text = "نمط الحركة: مشي طبيعي واستجابة (Normal)"
+    else
+        MovementMode = "Mirror"
+        ModeBtn.Text = "نمط الحركة: سيطرة كاملة (Mirror)"
+    end
+
+    if IsFollowing then
+        StartFollowing()
+    end
+end)
+
+local SelectingPlayer = false
+
+TargetBtn.MouseButton1Click:Connect(function()
+    if TargetPlayer then
+        TargetPlayer = nil
+
+        ClearChatHooks()
+        StopFollowing()
+        StopToolMatching()
+
+        IsFollowing = false
+        IsSpeedMatching = false
+        IsToolMatching = false
+
+        FollowBtn.Text = "تتبع الحركة والقفز (مُعطّل)"
+        FollowBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+
+        SpeedBtn.Text = "مطابقة نفس سرعة اللاعب (مُعطّل)"
+        SpeedBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+
+        ToolBtn.Text = "تقليد نمط مسك الأشياء باليد (مُعطّل)"
+        ToolBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+
+        TargetBtn.Text = "اضغط لتحديد لاعب لتقليد كلامه (لا يوجد)"
+        TargetBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+
+    else
+        SelectingPlayer = true
+
+        TargetBtn.Text = "انقر على شخصية اللاعب لتحديده..."
+        TargetBtn.BackgroundColor3 = Color3.fromRGB(180, 120, 0)
+    end
+end)
+
+Mouse.Button1Down:Connect(function()
+    if not SelectingPlayer then
+        return
+    end
+
+    local target = Mouse.Target
+
+    if target then
+        local model = target:FindFirstAncestorOfClass("Model")
+
+        if model then
+            local plr = Players:GetPlayerFromCharacter(model)
+
+            if plr and plr ~= LocalPlayer then
+                TargetPlayer = plr
+                SelectingPlayer = false
+
+                TargetBtn.Text =
+                    "المستهدف: "
+                    .. plr.DisplayName
+                    .. " (@"
+                    .. plr.Name
+                    .. ")"
+
+                TargetBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 200)
+
+                HookPlayerChat(plr)
+
+                if IsFollowing then
+                    StartFollowing()
+                end
+
+                if IsToolMatching then
+                    StartToolMatching()
+                end
+            end
+        end
+    end
+end)
+
+-- =========================================================
+-- زر التتبع
+-- =========================================================
+
+FollowBtn.MouseButton1Click:Connect(function()
+    if not TargetPlayer then
+        FollowBtn.Text = "حدد لاعباً أولاً!"
+
+        task.wait(1)
+
+        FollowBtn.Text =
+            IsFollowing
+            and "تتبع الحركة والقفز (مُفعّل)"
+            or "تتبع الحركة والقفز (مُعطّل)"
+
+        return
+    end
+
+    IsFollowing = not IsFollowing
+
+    if IsFollowing then
+        FollowBtn.Text = "تتبع الحركة والقفز (مُفعّل)"
+        FollowBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 100)
+
+        StartFollowing()
+    else
+        FollowBtn.Text = "تتبع الحركة والقفز (مُعطّل)"
+        FollowBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+
+        StopFollowing()
+    end
+end)
+
+-- =========================================================
+-- زر مطابقة السرعة
+-- =========================================================
+
+SpeedBtn.MouseButton1Click:Connect(function()
+    if not TargetPlayer then
+        SpeedBtn.Text = "حدد لاعباً أولاً!"
+
+        task.wait(1)
+
+        SpeedBtn.Text =
+            IsSpeedMatching
+            and "مطابقة نفس سرعة اللاعب (مُفعّل)"
+            or "مطابقة نفس سرعة اللاعب (مُعطّل)"
+
+        return
+    end
+
+    IsSpeedMatching = not IsSpeedMatching
+
+    if IsSpeedMatching then
+        SpeedBtn.Text = "مطابقة نفس سرعة اللاعب (مُفعّل)"
+        SpeedBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 100)
+    else
+        SpeedBtn.Text = "مطابقة نفس سرعة اللاعب (مُعطّل)"
+        SpeedBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    end
+end)
+
+-- =========================================================
+-- زر مطابقة الأدوات
+-- =========================================================
+
+ToolBtn.MouseButton1Click:Connect(function()
+    if not TargetPlayer then
+        ToolBtn.Text = "حدد لاعباً أولاً!"
+
+        task.wait(1)
+
+        ToolBtn.Text =
+            IsToolMatching
+            and "تقليد نمط مسك الأشياء باليد (مُفعّل)"
+            or "تقليد نمط مسك الأشياء باليد (مُعطّل)"
+
+        return
+    end
+
+    IsToolMatching = not IsToolMatching
+
+    if IsToolMatching then
+        ToolBtn.Text = "تقليد نمط مسك الأشياء باليد (مُفعّل)"
+        ToolBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 100)
+
+        StartToolMatching()
+    else
+        ToolBtn.Text = "تقليد نمط مسك الأشياء باليد (مُعطّل)"
+        ToolBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+
+        StopToolMatching()
+
+        local myChar = LocalPlayer.Character
+        local myHumanoid = myChar and myChar:FindFirstChildOfClass("Humanoid")
+
+        if myHumanoid then
+            pcall(function()
+                myHumanoid:UnequipTools()
+            end)
+        end
+    end
+end)
+
+-- =========================================================
+-- الإرسال
+-- =========================================================
+
+SendBtn.MouseButton1Click:Connect(function()
+    SendCustomMessage()
+end)
+
+TextBox.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        SendCustomMessage()
+    end
+end)
